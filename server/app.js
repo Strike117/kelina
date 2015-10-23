@@ -37,7 +37,7 @@ require('./routes')(app);
 var proxy = require('express-http-proxy');
 // var apiProxy = proxy('http://10.50.24.142:8080/', {
 // var apiProxy = proxy('204.151.185.164:9090', {
-var apiProxy = proxy('http://feedback-tool.cfappstpanpaz2.verizon.com', {
+var apiProxy = proxy('https://feedback-tool.cfappstpanpaz2.verizon.com', {
   forwardPath: function(req, res) {
     console.log('req.url', req.url);
     return require('url').parse(req.url).path;
@@ -47,35 +47,57 @@ var apiProxy = proxy('http://feedback-tool.cfappstpanpaz2.verizon.com', {
     //console.log('typeof',typeof data);
     //console.log('data.toString',data);
     //console.log(rsp);
-    var dataJSON = data;
+    var jsondata = {};
     try {
-      dataJSON = JSON.parse(decoder.write(data));
+      jsondata = JSON.parse(decoder.write(data));
+      //console.log(res.
+      console.log('rsp.statusCode', rsp.statusCode);
+      console.log('req.method', req.method)
 
     } catch (e) {
       console.log(e);
     }
 
-    RequestM.update({
-      path: req.path
-    }, {
-      path: req.path,
-      headers: req.headers,
-      response: {
-        data: dataJSON,
-        databuffer: data,
-        headers: rsp.headers
-      }
-    }, {
-      upsert: true
-    }, function(err, request) {
-      if (err) console.log(err);
-    });
+    if (rsp && rsp.statusCode >= 200 && rsp.statusCode < 300) {
+      RequestM.update({
+        path: req.path,
+        method: req.method
+      }, {
+        path: req.path,
+        headers: req.headers,
+        response: {
+          databuffer: data,
+          jsondata: jsondata,
+          headers: rsp.headers
+        }
+      }, {
+        upsert: true
+      }, function(err, request) {
+        if (err) console.log(err);
+      });
+      callback(null, data);
+    } else {
+      RequestM.findOne({
+        path: req.path,
+        method: req.method
+      }, function(err, request) {
+        if (err) {
+          console.log(err);
+        } else {
+          if (request && request.databuffer) {
+            data = request.databuffer;
+          }
+        }
+        callback(null, data);
+      });
 
-    callback(null, data);
+    }
+
   },
   decorateRequest: function(req) {
     RequestM.update({
-      path: req.path
+      path: req.path,
+      method: req.method
     }, req, {
       upsert: true
     }, function(err, request) {
@@ -87,7 +109,7 @@ var apiProxy = proxy('http://feedback-tool.cfappstpanpaz2.verizon.com', {
 
 //use on get and post
 app.all("*", apiProxy);
-app.all("*", function(req, res, next) {
+/*app.all("*", function(req, res, next) {
   console.log(req.url);
   console.log(req.path);
   RequestM.findOne({
@@ -108,7 +130,7 @@ app.all("*", function(req, res, next) {
     }
   });
 
-});
+});*/
 
 // Start server
 server.listen(config.port, config.ip, function() {
